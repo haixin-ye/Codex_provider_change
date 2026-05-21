@@ -14,13 +14,18 @@ import {
   Sparkles,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { MigrationProgress, MigrationResult, ProviderDistribution, ScanResult } from "./types";
 
 type BusyState = "idle" | "scanning" | "migrating";
 
 const PROVIDER_COLORS = ["#7C8CFF", "#44C7B6", "#E2A95E", "#D9658B", "#8A71E8", "#6DB7F2", "#9EA6B3"];
+const DESIGN_WIDTH = 1220;
+const FALLBACK_DESIGN_HEIGHT = 940;
+const MIN_UI_SCALE = 0.7;
+const MAX_UI_SCALE = 0.9;
 
 export function App() {
   const [codexHome, setCodexHome] = useState("");
@@ -33,6 +38,8 @@ export function App() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [progress, setProgress] = useState<MigrationProgress | null>(null);
   const [progressLog, setProgressLog] = useState<MigrationProgress[]>([]);
+  const [appScale, setAppScale] = useState(1);
+  const shellRef = useRef<HTMLDivElement | null>(null);
 
   const providerOptions = useMemo(() => collectProviderOptions(scan), [scan]);
 
@@ -49,6 +56,20 @@ export function App() {
     });
     void initialize();
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const updateScale = () => {
+      const availableWidth = Math.max(0, window.innerWidth - 44);
+      const availableHeight = Math.max(0, window.innerHeight - 64);
+      const contentHeight = shellRef.current?.scrollHeight || FALLBACK_DESIGN_HEIGHT;
+      const fitScale = Math.min(availableWidth / DESIGN_WIDTH, availableHeight / contentHeight);
+      setAppScale(Math.min(MAX_UI_SCALE, Math.max(MIN_UI_SCALE, fitScale)));
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
   }, []);
 
   useEffect(() => {
@@ -157,7 +178,8 @@ export function App() {
       <div className="ambient ambient-two" />
       <TitleBar onHelp={() => setIsHelpOpen(true)} />
 
-      <div className="app-shell">
+      <div className="app-viewport">
+        <div className="app-shell" ref={shellRef} style={{ "--app-scale": appScale } as CSSProperties}>
         <section className="hero">
           <div>
             <p className="eyebrow">LOCAL CODEX MAINTENANCE</p>
@@ -253,6 +275,7 @@ export function App() {
             />
           </section>
         </section>
+        </div>
       </div>
       {isHelpOpen ? <HelpDialog onClose={() => setIsHelpOpen(false)} /> : null}
     </main>

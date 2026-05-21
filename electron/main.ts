@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, shell, type OpenDialogOptions } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell, type OpenDialogOptions } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,11 +12,17 @@ const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
+  const { width: workAreaWidth, height: workAreaHeight } = screen.getPrimaryDisplay().workAreaSize;
+  const minWidth = Math.min(980, Math.max(900, workAreaWidth - 32));
+  const minHeight = Math.min(680, Math.max(640, workAreaHeight - 32));
+  const initialWidth = Math.min(1360, Math.max(minWidth, workAreaWidth - 96));
+  const initialHeight = Math.min(900, Math.max(minHeight, workAreaHeight - 96));
+
   mainWindow = new BrowserWindow({
-    width: 1360,
-    height: 900,
-    minWidth: 980,
-    minHeight: 740,
+    width: initialWidth,
+    height: initialHeight,
+    minWidth,
+    minHeight,
     center: true,
     title: "Codex Provider History Fixer",
     frame: false,

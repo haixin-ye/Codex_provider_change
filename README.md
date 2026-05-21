@@ -32,8 +32,6 @@
 - [核心功能](#核心功能)
 - [使用说明](#使用说明)
 - [实现方式](#实现方式)
-- [本地开发](#本地开发)
-- [发布说明](#发布说明)
 - [安全说明](#安全说明)
 
 ## 快速下载
@@ -347,84 +345,7 @@ sessions/
 | 打包 | electron-builder |
 | 自动发布 | GitHub Actions |
 
-## 本地开发
 
-安装依赖：
-
-```bash
-npm install
-```
-
-启动开发版：
-
-```bash
-npm run dev:electron
-```
-
-运行检查：
-
-```bash
-npm run typecheck
-npm test
-```
-
-构建前端和 Electron 主进程：
-
-```bash
-npm run build
-```
-
-生成 Windows 安装包和便携版：
-
-```bash
-npm run package:win
-```
-
-## 发布说明
-
-### 发布到 npm
-
-确认已经登录 npm：
-
-```bash
-npm whoami
-```
-
-发布：
-
-```bash
-npm publish
-```
-
-后续更新版本时，先升级版本号：
-
-```bash
-npm version patch
-npm publish
-```
-
-### 发布到 GitHub Releases
-
-项目内置 GitHub Actions 发布流程：
-
-```text
-.github/workflows/release.yml
-```
-
-创建并推送 `v` 开头的 tag 后，会自动触发 Windows 打包和 Release 上传：
-
-```bash
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin v0.1.0
-```
-
-GitHub Actions 会自动完成：
-
-1. 安装依赖
-2. 构建项目
-3. 打包 Windows 安装版和便携版
-4. 创建 GitHub Release
-5. 上传 `.exe` 等下载文件
 
 ## 安全说明
 
