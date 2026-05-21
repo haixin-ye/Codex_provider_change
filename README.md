@@ -1,11 +1,13 @@
-<p align="center">
-  <img src="docs/images/hero.png" alt="Codex Provider History Fixer" width="780">
-</p>
+
 
 <h1 align="center">Codex Provider History Fixer</h1>
 
 <p align="center">
   一个用于修复 Codex 切换 Provider 后历史会话不可见问题的本地桌面工具。
+</p>
+
+<p align="center">
+  <img src="docs/images/hero.png" alt="Codex Provider History Fixer" width="780">
 </p>
 
 <p align="center">
