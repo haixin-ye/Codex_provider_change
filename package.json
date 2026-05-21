@@ -25,7 +25,7 @@
     "prepack": "npm run build",
     "package": "npm run build && electron-builder --dir",
     "package:dir": "npm run build && electron-builder --dir",
-    "package:win": "npm run build && electron-builder --win portable nsis",
+    "package:win": "npm run build && electron-builder --win portable nsis --publish never",
     "dist": "npm run build && electron-builder"
   },
   "keywords": [
