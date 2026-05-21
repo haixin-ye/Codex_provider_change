@@ -44,6 +44,9 @@
     "sql.js": "^1.12.0",
     "toml": "^3.0.0"
   },
+  "optionalDependencies": {
+    "electron": "^33.2.1"
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.2",

@@ -169,6 +169,18 @@ npm install -g codex-provider-history-fixer
 codex-provider-history-fixer
 ```
 
+安装完成后，命令会直接启动桌面应用。npm 模式会在安装时下载 Electron 运行时，如果因为网络原因没有安装成功，可以先执行：
+
+```bash
+npm install -g electron
+```
+
+然后再次运行：
+
+```bash
+codex-provider-history-fixer
+```
+
 ## 本地开发
 
 安装依赖：
