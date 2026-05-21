@@ -6,9 +6,7 @@
   一个用于修复 Codex 切换 Provider 后历史会话不可见问题的本地桌面工具。
 </p>
 
-<p align="center">
-  <img src="docs/images/hero.png" alt="Codex Provider History Fixer" width="780">
-</p>
+
 
 <p align="center">
   <a href="https://github.com/haixin-ye/Codex_provider_change/releases/latest">
@@ -20,6 +18,10 @@
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows-7C8CFF?style=for-the-badge">
   <img alt="Local First" src="https://img.shields.io/badge/Local--First-No%20Telemetry-35C275?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-E2A95E?style=for-the-badge">
+</p>
+---
+<p align="center">
+  <img src="docs/images/hero.png" alt="Codex Provider History Fixer" width="780">
 </p>
 
 ---
