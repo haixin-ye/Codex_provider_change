@@ -19,7 +19,7 @@
   <img alt="Local First" src="https://img.shields.io/badge/Local--First-No%20Telemetry-35C275?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-E2A95E?style=for-the-badge">
 </p>
----
+
 <p align="center">
   <img src="docs/images/hero.png" alt="Codex Provider History Fixer" width="780">
 </p>
