@@ -4,28 +4,68 @@ import path from "node:path";
 import initSqlJs from "sql.js";
 import { describe, expect, it } from "vitest";
 
-import { migrateCodexHistory, scanCodexHistory } from "./historyStore.js";
+import { CodexProcessesRunningError, migrateCodexHistory, scanCodexHistory } from "./historyStore.js";
 
 describe("historyStore", () => {
+  it("stops before backup or database writes when Codex processes are running", async () => {
+    const codexHome = await makeCodexHome();
+
+    await expect(
+      migrateCodexHistory(
+        {
+          codexHome,
+          targetProvider: "ccswitch",
+          sourceProviders: ["openai"]
+        },
+        undefined,
+        {
+          findRunningCodexProcesses: () => [
+            {
+              pid: 1234,
+              name: "codex",
+              path: "C:\\Program Files\\Codex\\codex.exe"
+            }
+          ]
+        }
+      )
+    ).rejects.toBeInstanceOf(CodexProcessesRunningError);
+
+    expect(fs.existsSync(path.join(codexHome, "backups"))).toBe(false);
+    const after = await scanCodexHistory(codexHome);
+    expect(after.databaseDistribution).toEqual({ codex: 1, OpenAI: 1, openai: 1 });
+
+    fs.rmSync(codexHome, { recursive: true, force: true });
+  });
+
   it("migrates selected sqlite threads and session metadata with full session backups", async () => {
     const codexHome = await makeCodexHome();
+    fs.writeFileSync(path.join(codexHome, "state_5.sqlite-wal"), "stale wal");
+    fs.writeFileSync(path.join(codexHome, "state_5.sqlite-shm"), "stale shm");
 
     const before = await scanCodexHistory(codexHome);
     expect(before.configProvider).toBe("ccswitch");
     expect(before.databaseDistribution).toEqual({ codex: 1, OpenAI: 1, openai: 1 });
     expect(before.sessionDistribution).toEqual({ codex: 1, OpenAI: 1, openai: 1 });
 
-    const result = await migrateCodexHistory({
-      codexHome,
-      targetProvider: "ccswitch",
-      sourceProviders: ["openai"]
-    });
+    const result = await migrateCodexHistory(
+      {
+        codexHome,
+        targetProvider: "ccswitch",
+        sourceProviders: ["openai"]
+      },
+      undefined,
+      {
+        findRunningCodexProcesses: () => []
+      }
+    );
 
     expect(result.sourceProviders).toEqual(["openai"]);
     expect(result.updatedThreadRows).toBe(1);
     expect(result.updatedSessionFiles).toBe(1);
     expect(result.after.databaseDistribution).toEqual({ codex: 1, ccswitch: 1, OpenAI: 1 });
     expect(result.after.sessionDistribution).toEqual({ codex: 1, ccswitch: 1, OpenAI: 1 });
+    expect(fs.existsSync(path.join(codexHome, "state_5.sqlite-wal"))).toBe(false);
+    expect(fs.existsSync(path.join(codexHome, "state_5.sqlite-shm"))).toBe(false);
 
     const backupSession = path.join(
       result.backupDir,

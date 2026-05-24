@@ -17,9 +17,23 @@ import {
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { MigrationProgress, MigrationResult, ProviderDistribution, ScanResult } from "./types";
+import type {
+  MigrationProgress,
+  MigrationResult,
+  ProviderDistribution,
+  RunningCodexProcess,
+  ScanResult
+} from "./types";
 
 type BusyState = "idle" | "scanning" | "migrating";
+type ProcessGateState = {
+  open: boolean;
+  checking: boolean;
+  terminating: boolean;
+  confirmTerminate: boolean;
+  shakeKey: number;
+  processes: RunningCodexProcess[];
+};
 
 const PROVIDER_COLORS = ["#7C8CFF", "#44C7B6", "#E2A95E", "#D9658B", "#8A71E8", "#6DB7F2", "#9EA6B3"];
 const DESIGN_WIDTH = 1220;
@@ -36,6 +50,14 @@ export function App() {
   const [busy, setBusy] = useState<BusyState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [processGate, setProcessGate] = useState<ProcessGateState>({
+    open: false,
+    checking: false,
+    terminating: false,
+    confirmTerminate: false,
+    shakeKey: 0,
+    processes: []
+  });
   const [progress, setProgress] = useState<MigrationProgress | null>(null);
   const [progressLog, setProgressLog] = useState<MigrationProgress[]>([]);
   const [appScale, setAppScale] = useState(1);
@@ -133,6 +155,113 @@ export function App() {
   }
 
   async function migrate() {
+    setError(null);
+    try {
+      const runningProcesses = await getApi().checkCodexProcesses();
+      if (runningProcesses.length) {
+      setProcessGate({
+        open: true,
+        checking: false,
+        terminating: false,
+        confirmTerminate: false,
+        shakeKey: 0,
+        processes: runningProcesses
+      });
+        return;
+      }
+    } catch (caught) {
+      setError(messageFromError(caught));
+      return;
+    }
+    await runMigration();
+  }
+
+  async function continueAfterCodexClose() {
+    setProcessGate((current) => ({ ...current, checking: true }));
+    try {
+      const runningProcesses = await getApi().checkCodexProcesses();
+      if (runningProcesses.length) {
+        setProcessGate((current) => ({
+          open: true,
+          checking: false,
+          terminating: false,
+          confirmTerminate: false,
+          shakeKey: current.shakeKey + 1,
+          processes: runningProcesses
+        }));
+        return;
+      }
+
+      setProcessGate({
+        open: false,
+        checking: false,
+        terminating: false,
+        confirmTerminate: false,
+        shakeKey: 0,
+        processes: []
+      });
+      await runMigration();
+    } catch (caught) {
+      setProcessGate((current) => ({
+        ...current,
+        checking: false,
+        shakeKey: current.shakeKey + 1
+      }));
+      setError(messageFromError(caught));
+    }
+  }
+
+  function closeProcessGate() {
+    setProcessGate({
+      open: false,
+      checking: false,
+      terminating: false,
+      confirmTerminate: false,
+      shakeKey: 0,
+      processes: []
+    });
+  }
+
+  function requestTerminateCodex() {
+    setProcessGate((current) => ({ ...current, confirmTerminate: true }));
+  }
+
+  async function terminateCodexProcesses() {
+    setProcessGate((current) => ({ ...current, terminating: true }));
+    try {
+      const result = await getApi().terminateCodexProcesses();
+      if (result.remaining.length) {
+        setProcessGate((current) => ({
+          ...current,
+          terminating: false,
+          confirmTerminate: false,
+          shakeKey: current.shakeKey + 1,
+          processes: result.remaining
+        }));
+        setError(result.errors.map((item) => item.message).join(" ") || null);
+        return;
+      }
+
+      setProcessGate({
+        open: false,
+        checking: false,
+        terminating: false,
+        confirmTerminate: false,
+        shakeKey: 0,
+        processes: []
+      });
+      await runMigration();
+    } catch (caught) {
+      setProcessGate((current) => ({
+        ...current,
+        terminating: false,
+        shakeKey: current.shakeKey + 1
+      }));
+      setError(messageFromError(caught));
+    }
+  }
+
+  async function runMigration() {
     setBusy("migrating");
     setError(null);
     setResult(null);
@@ -277,6 +406,19 @@ export function App() {
         </section>
         </div>
       </div>
+      {processGate.open ? (
+        <CodexProcessDialog
+          checking={processGate.checking}
+          terminating={processGate.terminating}
+          confirmTerminate={processGate.confirmTerminate}
+          processes={processGate.processes}
+          shakeKey={processGate.shakeKey}
+          onClose={closeProcessGate}
+          onConfirm={continueAfterCodexClose}
+          onRequestTerminate={requestTerminateCodex}
+          onTerminate={terminateCodexProcesses}
+        />
+      ) : null}
       {isHelpOpen ? <HelpDialog onClose={() => setIsHelpOpen(false)} /> : null}
     </main>
   );
@@ -310,6 +452,98 @@ function TitleBar({ onHelp }: { onHelp: () => void }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function CodexProcessDialog({
+  checking,
+  terminating,
+  confirmTerminate,
+  processes,
+  shakeKey,
+  onClose,
+  onConfirm,
+  onRequestTerminate,
+  onTerminate
+}: {
+  checking: boolean;
+  terminating: boolean;
+  confirmTerminate: boolean;
+  processes: RunningCodexProcess[];
+  shakeKey: number;
+  onClose: () => void;
+  onConfirm: () => void;
+  onRequestTerminate: () => void;
+  onTerminate: () => void;
+}) {
+  const busy = checking || terminating;
+
+  return (
+    <div className="help-overlay process-overlay" role="presentation">
+      <section
+        className={shakeKey > 0 ? "process-dialog surface shake" : "process-dialog surface"}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="process-dialog-title"
+        key={shakeKey}
+      >
+        <div className="process-dialog-header">
+          <div className="process-mark">
+            <AlertTriangle size={18} />
+          </div>
+          <div>
+            <span className="section-kicker">SQLite safety check</span>
+            <h2 id="process-dialog-title">请先关闭全部 Codex 应用</h2>
+          </div>
+          <button className="icon-button compact" onClick={onClose} disabled={busy} title="取消迁移">
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="process-dialog-copy">
+          检测到 Codex CLI 或 Codex App 仍在运行。为了避免 <code>state_5.sqlite</code> 与 WAL/SHM 状态不一致，请关闭所有 Codex 窗口、终端里的 CLI 会话和后台进程。
+        </p>
+
+        <div className="process-list" aria-label="正在运行的 Codex 进程">
+          {processes.slice(0, 4).map((process) => (
+            <div className="process-row" key={`${process.pid}-${process.name}`}>
+              <strong>{process.name}</strong>
+              <span>PID {process.pid}</span>
+            </div>
+          ))}
+          {processes.length > 4 ? <em>还有 {processes.length - 4} 个 Codex 进程</em> : null}
+        </div>
+
+        <div className={confirmTerminate ? "danger-zone armed" : "danger-zone"}>
+          <div>
+            <strong>一键关闭全部 Codex</strong>
+            <p>
+              这会强制结束上面列出的 Codex 进程，正在运行的任务、未完成输出或未保存状态可能会被打断。
+            </p>
+          </div>
+          {confirmTerminate ? (
+            <button className="danger-action" onClick={onTerminate} disabled={busy}>
+              {terminating ? <Loader2 className="spin" size={15} /> : <AlertTriangle size={15} />}
+              <span>{terminating ? "正在关闭" : "确认强制关闭"}</span>
+            </button>
+          ) : (
+            <button className="danger-action muted" onClick={onRequestTerminate} disabled={busy}>
+              一键关闭
+            </button>
+          )}
+        </div>
+
+        <div className="process-actions">
+          <button className="secondary-action" onClick={onClose} disabled={busy}>
+            取消
+          </button>
+          <button className="primary-action process-confirm" onClick={onConfirm} disabled={busy}>
+            {checking ? <Loader2 className="spin" size={16} /> : <ShieldCheck size={16} />}
+            <span>{checking ? "正在重新检测" : "我已关闭 Codex 应用（CLI 和 Codex APP）"}</span>
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 

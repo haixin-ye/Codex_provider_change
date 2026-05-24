@@ -1,9 +1,9 @@
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 
-import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from "sql.js";
+import Database from "better-sqlite3";
 
+import { findRunningCodexProcesses } from "./codexProcesses.js";
 import { normalizeCodexHome } from "./codexPaths.js";
 import { readConfigProvider } from "./configProvider.js";
 import {
@@ -17,11 +17,24 @@ import type {
   MigrationProgress,
   MigrationResult,
   ProviderDistribution,
+  RunningCodexProcess,
   ScanResult
 } from "./types.js";
 
-let sqlPromise: Promise<SqlJsStatic> | null = null;
-const require = createRequire(import.meta.url);
+export class CodexProcessesRunningError extends Error {
+  readonly code = "CODEX_PROCESSES_RUNNING";
+  readonly processes: RunningCodexProcess[];
+
+  constructor(processes: RunningCodexProcess[]) {
+    super("Close all Codex CLI and Codex App processes before migrating history.");
+    this.name = "CodexProcessesRunningError";
+    this.processes = processes;
+  }
+}
+
+export type MigrationRuntime = {
+  findRunningCodexProcesses?: () => RunningCodexProcess[];
+};
 
 export async function scanCodexHistory(codexHomeInput?: string | null): Promise<ScanResult> {
   const codexHome = normalizeCodexHome(codexHomeInput);
@@ -44,13 +57,8 @@ export async function scanCodexHistory(codexHomeInput?: string | null): Promise<
 
   if (fs.existsSync(databasePath)) {
     try {
-      const db = await openSqlite(databasePath);
-      try {
-        databaseDistribution = readDatabaseDistribution(db);
-        threadCount = Object.values(databaseDistribution).reduce((sum, count) => sum + count, 0);
-      } finally {
-        db.close();
-      }
+      databaseDistribution = readDatabaseDistribution(databasePath);
+      threadCount = Object.values(databaseDistribution).reduce((sum, count) => sum + count, 0);
     } catch (error) {
       errors.push(`Unable to read state_5.sqlite: ${messageFromError(error)}`);
     }
@@ -82,12 +90,18 @@ export async function scanCodexHistory(codexHomeInput?: string | null): Promise<
 
 export async function migrateCodexHistory(
   options: MigrateOptions,
-  onProgress: (progress: MigrationProgress) => void = () => undefined
+  onProgress: (progress: MigrationProgress) => void = () => undefined,
+  runtime: MigrationRuntime = {}
 ): Promise<MigrationResult> {
   const codexHome = normalizeCodexHome(options.codexHome);
   const targetProvider = options.targetProvider.trim();
   if (!targetProvider) {
     throw new Error("Target provider cannot be blank.");
+  }
+
+  const runningProcesses = (runtime.findRunningCodexProcesses ?? findRunningCodexProcesses)();
+  if (runningProcesses.length) {
+    throw new CodexProcessesRunningError(runningProcesses);
   }
 
   onProgress({ stage: "scan", label: "扫描 Codex 历史", detail: codexHome, current: 1, total: 4 });
@@ -108,20 +122,7 @@ export async function migrateCodexHistory(
   await yieldToEventLoop();
 
   onProgress({ stage: "database", label: "更新 state_5.sqlite", detail: targetProvider, current: 3, total: 4 });
-  const db = await openSqlite(before.databasePath);
-  let updatedThreadRows = 0;
-  try {
-    const selected = buildProviderWhereClause(sourceProviders);
-    const countRows = db.exec(`SELECT COUNT(*) AS count FROM threads WHERE ${selected.where}`, selected.params);
-    updatedThreadRows = Number(countRows[0]?.values[0]?.[0] ?? 0);
-    db.run(`UPDATE threads SET model_provider = $target WHERE ${selected.where}`, {
-      ...selected.params,
-      $target: targetProvider
-    });
-    fs.writeFileSync(before.databasePath, Buffer.from(db.export()));
-  } finally {
-    db.close();
-  }
+  const updatedThreadRows = updateDatabaseProviders(before.databasePath, targetProvider, sourceProviders);
   await yieldToEventLoop();
 
   const updatedSessionFiles = await updateSessionProviders(
@@ -151,15 +152,49 @@ export async function migrateCodexHistory(
   };
 }
 
-function readDatabaseDistribution(db: SqlJsDatabase): ProviderDistribution {
-  const result = db.exec(`
+function readDatabaseDistribution(databasePath: string): ProviderDistribution {
+  const db = new Database(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    db.pragma("busy_timeout = 5000");
+    const rows = db.prepare(`
     SELECT model_provider AS provider, COUNT(*) AS count
     FROM threads
     GROUP BY model_provider
     ORDER BY model_provider COLLATE NOCASE
-  `);
-  const rows = result[0]?.values ?? [];
-  return Object.fromEntries(rows.map((row) => [String(row[0]), Number(row[1])]));
+  `).all() as Array<{ provider: string; count: number }>;
+    return Object.fromEntries(rows.map((row) => [row.provider, row.count]));
+  } finally {
+    db.close();
+  }
+}
+
+function updateDatabaseProviders(databasePath: string, targetProvider: string, sourceProviders: string[]): number {
+  const selected = buildProviderWhereClause(sourceProviders);
+  const db = new Database(databasePath, { fileMustExist: true });
+  let updatedThreadRows = 0;
+
+  try {
+    db.pragma("busy_timeout = 5000");
+    db.pragma("foreign_keys = ON");
+    const countRow = db.prepare(`SELECT COUNT(*) AS count FROM threads WHERE ${selected.where}`).get(selected.params) as
+      | { count: number }
+      | undefined;
+    updatedThreadRows = Number(countRow?.count ?? 0);
+
+    const update = db.transaction(() => {
+      db.prepare(`UPDATE threads SET model_provider = $target WHERE ${selected.where}`).run({
+        ...selected.params,
+        target: targetProvider
+      });
+    });
+    update();
+    db.pragma("wal_checkpoint(TRUNCATE)");
+  } finally {
+    db.close();
+  }
+
+  removeSqliteSidecars(databasePath);
+  return updatedThreadRows;
 }
 
 function createBackupDir(codexHome: string): string {
@@ -275,9 +310,9 @@ function buildProviderWhereClause(sourceProviders: string[]): {
 } {
   const params: Record<string, string> = {};
   const placeholders = sourceProviders.map((provider, index) => {
-    const key = `$source${index}`;
+    const key = `source${index}`;
     params[key] = provider;
-    return key;
+    return `$${key}`;
   });
   return {
     where: `model_provider IN (${placeholders.join(", ")})`,
@@ -285,16 +320,10 @@ function buildProviderWhereClause(sourceProviders: string[]): {
   };
 }
 
-async function getSql(): Promise<SqlJsStatic> {
-  sqlPromise ??= initSqlJs({
-    locateFile: (file) => (file.endsWith(".wasm") ? require.resolve(`sql.js/dist/${file}`) : file)
-  });
-  return sqlPromise;
-}
-
-async function openSqlite(databasePath: string): Promise<SqlJsDatabase> {
-  const SQL = await getSql();
-  return new SQL.Database(fs.readFileSync(databasePath));
+function removeSqliteSidecars(databasePath: string): void {
+  for (const suffix of ["-wal", "-shm"]) {
+    fs.rmSync(`${databasePath}${suffix}`, { force: true });
+  }
 }
 
 function timestampForPath(): string {

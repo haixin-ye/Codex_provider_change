@@ -1,6 +1,6 @@
 {
   "name": "codex-provider-history-fixer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A desktop utility that retargets local Codex history sessions to the active model provider.",
   "type": "module",
   "main": "dist-electron/main.js",
@@ -16,17 +16,21 @@
   ],
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "dev:electron": "concurrently -k \"npm:dev\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "dev:electron": "npm run rebuild:electron && concurrently -k \"npm:dev\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "clean": "node -e \"const fs=require('fs'); for (const dir of ['dist','dist-electron','release']) fs.rmSync(dir,{recursive:true,force:true});\"",
+    "rebuild:electron": "electron-rebuild -f -w better-sqlite3 -v 33.4.11",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "rebuild:native": "npm run rebuild:electron",
     "build": "npm run clean && tsc -p tsconfig.json && vite build && tsc -p electron/tsconfig.json && node -e \"require('fs').copyFileSync('electron/preload.cjs','dist-electron/preload.cjs')\"",
-    "start": "electron .",
-    "test": "vitest run",
+    "start": "npm run rebuild:electron && electron .",
+    "test": "npm run rebuild:node && vitest run",
     "typecheck": "tsc -p tsconfig.json && tsc -p electron/tsconfig.json",
     "prepack": "npm run build",
-    "package": "npm run build && electron-builder --dir",
-    "package:dir": "npm run build && electron-builder --dir",
-    "package:win": "npm run build && electron-builder --win portable nsis --publish never",
-    "dist": "npm run build && electron-builder"
+    "package": "npm run build && npm run rebuild:electron && electron-builder --dir",
+    "package:dir": "npm run build && npm run rebuild:electron && electron-builder --dir",
+    "package:win": "npm run build && npm run rebuild:electron && electron-builder --win portable nsis --publish never",
+    "dist": "npm run build && npm run rebuild:electron && electron-builder",
+    "postinstall": "electron-rebuild -f -w better-sqlite3 -v 33.4.11"
   },
   "keywords": [
     "codex",
@@ -38,16 +42,18 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@electron/rebuild": "^3.6.1",
+    "better-sqlite3": "^12.10.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "sql.js": "^1.12.0",
     "toml": "^3.0.0"
   },
   "optionalDependencies": {
     "electron": "^33.2.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
@@ -57,6 +63,7 @@
     "cross-env": "^7.0.3",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "sql.js": "^1.14.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.6",
     "vitest": "^2.1.8",
@@ -68,11 +75,18 @@
     "directories": {
       "output": "release"
     },
+    "npmRebuild": false,
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
       "node_modules/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "dist-electron/**/*",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*"
     ],
     "win": {
       "signAndEditExecutable": false,

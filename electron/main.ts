@@ -2,9 +2,11 @@ import { app, BrowserWindow, Menu, dialog, ipcMain, screen, shell, type OpenDial
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { findRunningCodexProcesses, terminateRunningCodexProcesses } from "./core/codexProcesses.js";
 import { defaultCodexHome } from "./core/codexPaths.js";
-import { migrateCodexHistory, scanCodexHistory } from "./core/historyStore.js";
+import { scanCodexHistory } from "./core/historyStore.js";
 import type { MigrateOptions } from "./core/types.js";
+import { runMigrationInWorker } from "./migrationRunner.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,8 +77,10 @@ app.on("window-all-closed", () => {
 function registerIpc(): void {
   ipcMain.handle("codex:get-default-home", () => defaultCodexHome());
   ipcMain.handle("codex:scan", (_event, codexHome?: string) => scanCodexHistory(codexHome));
+  ipcMain.handle("codex:check-processes", () => findRunningCodexProcesses());
+  ipcMain.handle("codex:terminate-processes", () => terminateRunningCodexProcesses());
   ipcMain.handle("codex:migrate", (event, payload: MigrateOptions) =>
-    migrateCodexHistory(payload, (progress) => {
+    runMigrationInWorker(payload, (progress) => {
       event.sender.send("codex:migration-progress", progress);
     })
   );

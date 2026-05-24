@@ -1,5 +1,20 @@
 export type ProviderDistribution = Record<string, number>;
 
+export type RunningCodexProcess = {
+  pid: number;
+  name: string;
+  path?: string;
+};
+
+export type TerminateCodexProcessesResult = {
+  terminated: RunningCodexProcess[];
+  errors: Array<{
+    process: RunningCodexProcess;
+    message: string;
+  }>;
+  remaining: RunningCodexProcess[];
+};
+
 export type ScanResult = {
   codexHome: string;
   configPath: string;
