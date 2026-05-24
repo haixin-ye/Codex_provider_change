@@ -46,20 +46,19 @@
 适合绝大多数普通用户。
 
 1. 打开 [v0.2.0 下载页面](https://github.com/haixin-ye/Codex_provider_change/releases/tag/v0.2.0)
-2. 在 `Assets` 区域下载 `Codex-Provider-History-Fixer-v0.2.0-win-unpacked.zip`
-3. 解压后双击 `Codex Provider History Fixer.exe`
+2. 在 `Assets` 区域下载 `Codex.Provider.History.Fixer.Setup.0.2.0.exe` 或 `Codex.Provider.History.Fixer.0.2.0.exe`
+3. 双击运行应用
 
 Release 页面里通常会出现几类文件：
 
 | 文件 | 适合谁 | 如何使用 |
 | --- | --- | --- |
-| `Codex-Provider-History-Fixer-vx.y.z-win-unpacked.zip` | 想直接使用桌面版的普通用户 | 下载后解压整个文件夹，再双击里面的 `.exe` |
-| `Codex Provider History Fixer Setup x.y.z.exe` | 想像普通软件一样安装的用户 | 下载后双击安装，安装完成后从开始菜单或安装目录启动 |
-| `Codex Provider History Fixer x.y.z.exe` | 想快速运行的用户 | 下载后直接双击运行，不需要安装 |
+| `Codex.Provider.History.Fixer.Setup.x.y.z.exe` | 想像普通软件一样安装的用户 | 下载后双击安装，安装完成后从开始菜单或安装目录启动 |
+| `Codex.Provider.History.Fixer.x.y.z.exe` | 想快速运行的用户 | 下载后直接双击运行，不需要安装 |
 | `Source code.zip` / `Source code.tar.gz` | 开发者查看源码 | 不是普通用户要下载的软件 |
 
 > [!TIP]
-> 普通用户优先下载 `win-unpacked.zip`。解压后不要只拷贝单个 `.exe`，需要保留整个文件夹一起运行。
+> 普通用户优先下载带 `Setup` 的安装版。如果你只是想临时试用，可以下载不带 `Setup` 的便携版。
 
 ## 最新版本
 
